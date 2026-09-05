@@ -1,0 +1,133 @@
+/* Browsing-region foot quota panel: a compact title row over three stacked
+   meters and a refresh row. Colors ride the theme via currentColor mixes;
+   the only literals are the meter-level accents. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 4px 4px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.label {
+  font-size: 12px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.summary {
+  flex: 1;
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.meterRow {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.meterHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.meterLabel {
+  opacity: 0.8;
+}
+
+.meterValue {
+  font-variant-numeric: tabular-nums;
+}
+
+.track {
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  border-radius: 2px;
+}
+
+.ok {
+  background: #34c08c;
+}
+
+.warning {
+  background: #e8a33d;
+}
+
+.danger {
+  background: #e5534b;
+}
+
+.meterFoot {
+  font-size: 10px;
+  opacity: 0.65;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.updated {
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 11px;
+  text-decoration: none;
+  opacity: 0.8;
+  font: inherit;
+}
+
+.action:hover {
+  opacity: 1;
+}
+
+.stateRow {
+  padding: 4px 0;
+  font-size: 11px;
+  opacity: 0.7;
+}

@@ -1,0 +1,1339 @@
+From f41359e5574ad981dfba7ebefd4d0bc5c22ca2fd Mon Sep 17 00:00:00 2001
+From: mouse <mouse@localhost>
+Date: Sat, 5 Sep 2026 17:14:14 +0800
+Subject: [PATCH] fix: restore opencode-go usage widget (0.1.3 adapt)
+
+Port of the pre-rc2 local customization (e13f918e17) onto 0.1.3-alpha.1:
+- restore packages/client/ui-usage + packages/host/opencode-usage (rc.5 sources)
+- ui-workspace: re-declare sidebar.workspaces.footer list slot + render strip
+- web-app: mount opencode-usage bridge row + ui-usage client row + deps
+- tsconfig.base/client/host wiring; lockfile updated
+- built lib for both packages
+---
+ packages/bundle/web-app/cordis.patch.yml      |  10 ++
+ packages/bundle/web-app/package.json          |   2 +
+ packages/client/ui-usage/README.md            |   7 +
+ packages/client/ui-usage/package.json         |  77 +++++++++
+ .../ui-usage/src/client/UsagePanel.module.css | 133 ++++++++++++++++
+ .../client/ui-usage/src/client/UsagePanel.tsx | 145 +++++++++++++++++
+ packages/client/ui-usage/src/client/index.ts  |  51 ++++++
+ .../client/ui-usage/src/client/locales.ts     |  43 ++++++
+ .../ui-usage/src/client/usage-monitor.ts      |  94 +++++++++++
+ packages/client/ui-usage/src/css-modules.d.ts |   6 +
+ packages/client/ui-usage/src/index.ts         |   4 +
+ packages/client/ui-usage/src/invariant.ts     |  31 ++++
+ packages/client/ui-usage/tsconfig.json        |  33 ++++
+ packages/client/ui-usage/tsdown.config.ts     |   3 +
+ .../ui-workspace/src/client/contract/slots.ts |  17 +-
+ .../client/ui-workspace/src/client/index.ts   |   5 +-
+ .../client/rows/WorkspaceBrowser.module.css   |  12 ++
+ .../src/client/rows/WorkspaceBrowser.tsx      |   9 ++
+ packages/host/opencode-usage/README.md        |   7 +
+ packages/host/opencode-usage/package.json     |  44 ++++++
+ packages/host/opencode-usage/src/index.ts     | 146 ++++++++++++++++++
+ packages/host/opencode-usage/src/invariant.ts |  31 ++++
+ packages/host/opencode-usage/tsconfig.json    |  21 +++
+ packages/host/opencode-usage/tsdown.config.ts |  17 ++
+ pnpm-lock.yaml                                |  54 +++++++
+ tsconfig.base.json                            |   2 +
+ tsconfig.client.json                          |   1 +
+ tsconfig.host.json                            |   1 +
+ 28 files changed, 1004 insertions(+), 2 deletions(-)
+ create mode 100644 packages/client/ui-usage/README.md
+ create mode 100644 packages/client/ui-usage/package.json
+ create mode 100644 packages/client/ui-usage/src/client/UsagePanel.module.css
+ create mode 100644 packages/client/ui-usage/src/client/UsagePanel.tsx
+ create mode 100644 packages/client/ui-usage/src/client/index.ts
+ create mode 100644 packages/client/ui-usage/src/client/locales.ts
+ create mode 100644 packages/client/ui-usage/src/client/usage-monitor.ts
+ create mode 100644 packages/client/ui-usage/src/css-modules.d.ts
+ create mode 100644 packages/client/ui-usage/src/index.ts
+ create mode 100644 packages/client/ui-usage/src/invariant.ts
+ create mode 100644 packages/client/ui-usage/tsconfig.json
+ create mode 100644 packages/client/ui-usage/tsdown.config.ts
+ create mode 100644 packages/host/opencode-usage/README.md
+ create mode 100644 packages/host/opencode-usage/package.json
+ create mode 100644 packages/host/opencode-usage/src/index.ts
+ create mode 100644 packages/host/opencode-usage/src/invariant.ts
+ create mode 100644 packages/host/opencode-usage/tsconfig.json
+ create mode 100644 packages/host/opencode-usage/tsdown.config.ts
+
+diff --git a/packages/bundle/web-app/cordis.patch.yml b/packages/bundle/web-app/cordis.patch.yml
+index ee0217066d..6255bb44e5 100644
+--- a/packages/bundle/web-app/cordis.patch.yml
++++ b/packages/bundle/web-app/cordis.patch.yml
+@@ -87,6 +87,11 @@
+     - id: plugin-inventory
+       name: '@deepseek-ai/dsh-host-plugin-inventory'
+ 
++    # Same-origin bridge to OpenCode Go's official quota API: the sidebar
++    # usage panel's data feed. The Go bearer token stays host-side.
++    - id: opencode-usage
++      name: '@deepseek-ai/dsh-host-opencode-usage'
++
+     # Session commands, cold reads, and live control over Typert Remote.
+     - id: session-controller
+       name: '@deepseek-ai/dsh-api-session-controller'
+@@ -310,6 +315,11 @@
+     - id: ui-trajectory
+       name: '@deepseek-ai/dsh-client-ui-trajectory'
+ 
++    # OpenCode Go subscription usage: live quota meters in a panel below the
++    # sidebar session list (the sidebar.workspaces.footer slot).
++    - id: ui-usage
++      name: '@deepseek-ai/dsh-client-ui-usage'
++
+ # ── the agent plane moves behind agent presets ─────────────────────────────
+ #
+ # Every row below composes what ONE agent contributes to the host registries:
+diff --git a/packages/bundle/web-app/package.json b/packages/bundle/web-app/package.json
+index 9531c638fb..764997c4c3 100644
+--- a/packages/bundle/web-app/package.json
++++ b/packages/bundle/web-app/package.json
+@@ -84,6 +84,7 @@
+     "@deepseek-ai/dsh-client-ui-tool": "workspace:^",
+     "@deepseek-ai/dsh-client-ui-workflow-run": "workspace:^",
+     "@deepseek-ai/dsh-client-ui-trajectory": "workspace:^",
++    "@deepseek-ai/dsh-client-ui-usage": "workspace:^",
+     "@deepseek-ai/dsh-client-ui-workspace": "workspace:^",
+     "@deepseek-ai/dsh-cmdline": "workspace:^",
+     "@deepseek-ai/dsh-code-runtime-worker-thread": "workspace:^",
+@@ -91,6 +92,7 @@
+     "@deepseek-ai/dsh-cordis-host-runner": "workspace:^",
+     "@deepseek-ai/dsh-web-frontend": "workspace:^",
+     "@deepseek-ai/dsh-host-frontend-static": "workspace:^",
++    "@deepseek-ai/dsh-host-opencode-usage": "workspace:^",
+     "@deepseek-ai/dsh-host-directory-picker-auto": "workspace:^",
+     "@deepseek-ai/dsh-host-directory-picker-browse": "workspace:^",
+     "@deepseek-ai/dsh-host-directory-picker-native": "workspace:^",
+diff --git a/packages/client/ui-usage/README.md b/packages/client/ui-usage/README.md
+new file mode 100644
+index 0000000000..3ffbfb1857
+--- /dev/null
++++ b/packages/client/ui-usage/README.md
+@@ -0,0 +1,7 @@
++# @deepseek-ai/dsh-client-ui-usage
++
++OpenCode Go subscription usage panel for the DSH Web GUI, pinned below the sidebar's session list (the `sidebar.workspaces.footer` slot, between the "Show more sessions" overflow button and the sidebar foot).
++
++Registers a wide-only panel with the 5-hour/weekly/monthly quota meters — per-window percent readings, progress bars, and reset countdowns — under a compact title row, plus the refresh action and the updated-at timestamp. The panel stays mounted across session switches and renders nothing in the collapsed rail.
++
++Data comes from the same-origin bridge route `/api/opencode-go/usage` mounted by `@deepseek-ai/dsh-host-opencode-usage`; the widget polls once a minute.
+diff --git a/packages/client/ui-usage/package.json b/packages/client/ui-usage/package.json
+new file mode 100644
+index 0000000000..03193d9be6
+--- /dev/null
++++ b/packages/client/ui-usage/package.json
+@@ -0,0 +1,77 @@
++{
++  "name": "@deepseek-ai/dsh-client-ui-usage",
++  "description": "OpenCode Go subscription usage panel below the sidebar session list: live 5-hour/weekly/monthly quota meters from the official usage API",
++  "version": "0.1.0-rc.5",
++  "publishConfig": {
++    "access": "public"
++  },
++  "repository": {
++    "type": "git",
++    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
++    "directory": "packages/client/ui-usage"
++  },
++  "type": "module",
++  "main": "lib/index.js",
++  "types": "lib/types/index.d.ts",
++  "exports": {
++    ".": {
++      "types": "./lib/types/index.d.ts",
++      "default": "./lib/index.js"
++    },
++    "./invariant": {
++      "types": "./lib/types/invariant.d.ts",
++      "default": "./lib/invariant.js"
++    },
++    "./client": {
++      "types": "./lib/types/client/index.d.ts",
++      "default": "./lib/client.js"
++    },
++    "./src/*": "./src/*",
++    "./package.json": "./package.json"
++  },
++  "dsh": {
++    "client": {
++      "inject": [
++        "@deepseek-ai/dsh-client-locale",
++        "@deepseek-ai/dsh-client-ui-renderer",
++        "@deepseek-ai/dsh-client-ui-workspace"
++      ],
++      "platform": "web"
++    }
++  },
++  "scripts": {
++    "bundle": "tsdown",
++    "watch": "tsdown --watch"
++  },
++  "license": "MIT",
++  "peerDependencies": {
++    "@deepseek-ai/cordis": "workspace:^",
++    "@deepseek-ai/dsh-client-locale": "workspace:^",
++    "@deepseek-ai/dsh-client-ui-renderer": "workspace:^",
++    "@deepseek-ai/dsh-client-ui-workspace": "workspace:^",
++    "@deepseek-ai/dsh-client-ui-primitives": "workspace:^",
++    "@deepseek-ai/dsh-client-ui-slots": "workspace:^",
++    "@deepseek-ai/dsh-invariants": "workspace:^",
++    "react": "^18.2.0",
++    "react-dom": "^18.2.0"
++  },
++  "devDependencies": {
++    "@deepseek-ai/cordis": "workspace:^",
++    "@deepseek-ai/dsh-client-locale": "workspace:^",
++    "@deepseek-ai/dsh-client-ui-renderer": "workspace:^",
++    "@deepseek-ai/dsh-client-ui-workspace": "workspace:^",
++    "@deepseek-ai/dsh-client-ui-primitives": "workspace:^",
++    "@deepseek-ai/dsh-client-ui-slots": "workspace:^",
++    "@deepseek-ai/dsh-invariants": "workspace:^",
++    "@types/react": "~18.3.1",
++    "@types/react-dom": "~18.3.0",
++    "react": "^18.2.0",
++    "react-dom": "^18.2.0"
++  },
++  "files": [
++    "lib/index.js",
++    "lib/invariant.js",
++    "lib/client.js",
++    "lib/types/**/*.d.ts"
++  ]
++}
+diff --git a/packages/client/ui-usage/src/client/UsagePanel.module.css b/packages/client/ui-usage/src/client/UsagePanel.module.css
+new file mode 100644
+index 0000000000..3ee545738d
+--- /dev/null
++++ b/packages/client/ui-usage/src/client/UsagePanel.module.css
+@@ -0,0 +1,133 @@
++/* Browsing-region foot quota panel: a compact title row over three stacked
++   meters and a refresh row. Colors ride the theme via currentColor mixes;
++   the only literals are the meter-level accents. */
++
++.root {
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++  padding: 2px 4px 4px;
++}
++
++.head {
++  display: flex;
++  align-items: center;
++  gap: 6px;
++  min-width: 0;
++}
++
++.label {
++  font-size: 12px;
++}
++
++.dot {
++  width: 8px;
++  height: 8px;
++  border-radius: 50%;
++}
++
++.summary {
++  flex: 1;
++  min-width: 0;
++  margin-left: auto;
++  overflow: hidden;
++  text-align: right;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++  font-size: 11px;
++  opacity: 0.75;
++  font-variant-numeric: tabular-nums;
++}
++
++.meterRow {
++  display: flex;
++  flex-direction: column;
++  gap: 3px;
++}
++
++.meterHead {
++  display: flex;
++  justify-content: space-between;
++  gap: 8px;
++  font-size: 11px;
++}
++
++.meterLabel {
++  opacity: 0.8;
++}
++
++.meterValue {
++  font-variant-numeric: tabular-nums;
++}
++
++.track {
++  height: 4px;
++  border-radius: 2px;
++  background: color-mix(in srgb, currentColor 12%, transparent);
++  overflow: hidden;
++}
++
++.fill {
++  height: 100%;
++  border-radius: 2px;
++}
++
++.ok {
++  background: #34c08c;
++}
++
++.warning {
++  background: #e8a33d;
++}
++
++.danger {
++  background: #e5534b;
++}
++
++.meterFoot {
++  font-size: 10px;
++  opacity: 0.65;
++}
++
++.foot {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 8px;
++  font-size: 11px;
++}
++
++.updated {
++  opacity: 0.6;
++  font-variant-numeric: tabular-nums;
++}
++
++.actions {
++  display: flex;
++  gap: 8px;
++}
++
++.action {
++  display: inline-flex;
++  align-items: center;
++  gap: 4px;
++  border: none;
++  background: transparent;
++  color: inherit;
++  cursor: pointer;
++  padding: 2px 4px;
++  font-size: 11px;
++  text-decoration: none;
++  opacity: 0.8;
++  font: inherit;
++}
++
++.action:hover {
++  opacity: 1;
++}
++
++.stateRow {
++  padding: 4px 0;
++  font-size: 11px;
++  opacity: 0.7;
++}
+diff --git a/packages/client/ui-usage/src/client/UsagePanel.tsx b/packages/client/ui-usage/src/client/UsagePanel.tsx
+new file mode 100644
+index 0000000000..16c2e7ec03
+--- /dev/null
++++ b/packages/client/ui-usage/src/client/UsagePanel.tsx
+@@ -0,0 +1,145 @@
++/**
++ * The sidebar browsing-region foot panel: three vertical OpenCode Go quota
++ * meters under a compact title row, plus the refresh/updated row. Pure
++ * projection: data arrives through the bound usage hook, the column state
++ * through the slot owner share; nothing else enters from the owner.
++ */
++
++import { useEffect, useState } from 'react'
++import {
++  IconDataOutline16, IconRefreshOutline14, IconRightUpOutline14,
++} from '@deepseek-ai/dsh-client-ui-primitives'
++import type { InjectFace, PropsLocale, PropsRuntime, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
++// Type-only: the 'sidebar.workspaces.footer' SlotMap row (declared by ui-workspace).
++import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
++import type { NS } from './locales.ts'
++import type { UsageSnapshot, UsageWindow } from './usage-monitor.ts'
++import css from './UsagePanel.module.css'
++
++/** Registrant-private injected share (arrives via the register inject factory). */
++export interface UsageActionFace {
++  hooks: {
++    usage: {
++      getSnapshot(): UsageSnapshot
++      subscribe(listener: () => void): () => void
++    }
++  }
++  /** Re-query the bridge route immediately. */
++  refresh(): void
++}
++
++/** Full panel props composed by the browsing-region footer slot. */
++export type UsagePanelProps =
++  PropsRuntime<'sidebar.workspaces.footer'>
++  & InjectFace<UsageActionFace>
++  & PropsLocale<typeof NS>
++
++interface MeterSpec {
++  readonly kind: 'rolling' | 'weekly' | 'monthly'
++  readonly label: 'rolling' | 'weekly' | 'monthly'
++}
++
++const METERS: readonly MeterSpec[] = [
++  { kind: 'rolling', label: 'rolling' },
++  { kind: 'weekly', label: 'weekly' },
++  { kind: 'monthly', label: 'monthly' },
++]
++
++/** Usage-level color class: calm below 60%, warning below 85%, danger after. */
++function levelClass(percent: number): string | undefined {
++  if (percent >= 85) return css.danger
++  if (percent >= 60) return css.warning
++  return css.ok
++}
++
++/** Compact duration until the reset instant ("1h23m"). */
++function remainingLabel(untilMs: number): string {
++  const totalMinutes = Math.floor(Math.max(0, untilMs) / 60_000)
++  const hours = Math.floor(totalMinutes / 60)
++  const minutes = totalMinutes % 60
++  return hours > 0 ? `${hours}h${minutes}m` : `${minutes}m`
++}
++
++/** One vertical quota meter inside the panel. */
++function MeterRow({ label, window: quota, t }: {
++  label: string
++  window: UsageWindow
++  t: TranslateNS<typeof NS>
++}) {
++  const [now, setNow] = useState(() => Date.now())
++  useEffect(() => {
++    const timer = window.setInterval(() => { setNow(Date.now()) }, 30_000)
++    return () => { window.clearInterval(timer) }
++  }, [])
++  const percent = quota.percent
++  return (
++    <div className={css.meterRow}>
++      <div className={css.meterHead}>
++        <span className={css.meterLabel}>{label}</span>
++        <span className={css.meterValue}>{percent}% · {t('remaining')} {100 - percent}%</span>
++      </div>
++      <div className={css.track}>
++        <div className={`${css.fill} ${levelClass(percent)}`} style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />
++      </div>
++      <div className={css.meterFoot}>{remainingLabel(new Date(quota.resetsAt).getTime() - now)} {t('resetsIn')}</div>
++    </div>
++  )
++}
++
++/** Render the browsing-region foot quota panel (null in the 56px rail). */
++export function UsagePanel({ wide, useUsage, refresh, t }: UsagePanelProps) {
++  const snapshot = useUsage(identity => identity)
++  if (!wide) return null
++  const windows = snapshot.data?.usage
++  const rolling = windows?.rolling
++  const summary = snapshot.phase === 'error'
++    ? t('error')
++    : windows === undefined
++      ? t('loading')
++      : t('summary')
++        .replace('{rolling}', String(windows.rolling.percent))
++        .replace('{weekly}', String(windows.weekly.percent))
++        .replace('{monthly}', String(windows.monthly.percent))
++
++  return (
++    <div className={css.root}>
++      <div className={css.head}>
++        <IconDataOutline16 size={14} />
++        <span className={css.label}>{t('title')}</span>
++        {rolling !== undefined && <span className={`${css.dot} ${levelClass(rolling.percent)}`} />}
++        {windows !== undefined && <span className={css.summary}>{summary}</span>}
++      </div>
++      {snapshot.phase === 'ready' && windows !== undefined ? (
++        <>
++          {METERS.map(({ kind, label }) => (
++            <MeterRow key={kind} label={t(label)} window={windows[kind]} t={t} />
++          ))}
++          <div className={css.foot}>
++            <span className={css.updated}>
++              {t('updatedAt')} {snapshot.fetchedAt === undefined ? '—' : new Date(snapshot.fetchedAt).toLocaleTimeString()}
++            </span>
++            <div className={css.actions}>
++              <button type="button" className={css.action} onClick={() => { refresh() }}>
++                <IconRefreshOutline14 size={12} />
++                {t('refresh')}
++              </button>
++              <a
++                className={css.action}
++                href="https://opencode.ai/workspace/wrk_01M01BX6QTNG0E111SWAEPH4HJ/go"
++                target="_blank"
++                rel="noreferrer"
++              >
++                {t('openDashboard')}
++                <IconRightUpOutline14 size={12} />
++              </a>
++            </div>
++          </div>
++        </>
++      ) : (
++        <div className={css.stateRow}>
++          {snapshot.phase === 'error' ? `${t('error')}${snapshot.error === undefined ? '' : `: ${snapshot.error}`}` : t('loading')}
++        </div>
++      )}
++    </div>
++  )
++}
+diff --git a/packages/client/ui-usage/src/client/index.ts b/packages/client/ui-usage/src/client/index.ts
+new file mode 100644
+index 0000000000..fdca06c1c1
+--- /dev/null
++++ b/packages/client/ui-usage/src/client/index.ts
+@@ -0,0 +1,51 @@
++/**
++ * Browser OpenCode Go usage widget: a `sidebar.workspaces.footer` entry — a
++ * quota panel pinned below the sidebar's session list with three vertical
++ * meters, fed by a poller over the same-origin bridge route.
++ */
++import type { Context } from '@deepseek-ai/cordis'
++// Type-only: pulls the locale plugin's Context merge (ctx.locale).
++import type {} from '@deepseek-ai/dsh-client-locale/client'
++// Type-only: pulls the renderer plugin's Context merge (ctx.slots).
++import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
++// Type-only: the 'sidebar.workspaces.footer' SlotMap row (declared by the
++// workspace package) must be in the program for the register call to type.
++import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
++import { UsageMonitor } from './usage-monitor.ts'
++import { en, NS, zh, type UsageKey } from './locales.ts'
++import { UsagePanel, type UsageActionFace } from './UsagePanel.tsx'
++
++declare module '@deepseek-ai/dsh-client-ui-slots' {
++  interface LocaleNamespaceMap {
++    /** Usage widget copy. */
++    'opencode-usage': UsageKey
++  }
++}
++
++/** Required services: the footer slot, the locale service, and the poller's bridge route. */
++export const inject = ['slots', 'locale']
++
++/**
++ * Client plugin body: mount the poller and register the panel. The
++ * registration rides the slot service's inject wrapper so plugin unload
++ * removes the panel; the poller runs while the plugin lives.
++ * @param ctx - client root context.
++ */
++export function apply(ctx: Context): void {
++  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-usage: dictionaries')
++  const monitor = new UsageMonitor()
++  ctx.effect(() => {
++    monitor.start()
++    return () => { monitor.stop() }
++  }, 'ui-usage: poller')
++  ctx.slots.inject('sidebar.workspaces.footer', () => ctx.slots.register({
++    name: 'sidebar.workspaces.footer',
++    id: 'opencode-go-usage',
++    order: 50,
++    locale: NS,
++    inject: (): UsageActionFace => ({
++      hooks: { usage: monitor },
++      refresh: () => { void monitor.refresh() },
++    }),
++  }, UsagePanel))
++}
+diff --git a/packages/client/ui-usage/src/client/locales.ts b/packages/client/ui-usage/src/client/locales.ts
+new file mode 100644
+index 0000000000..8eca7fc68b
+--- /dev/null
++++ b/packages/client/ui-usage/src/client/locales.ts
+@@ -0,0 +1,43 @@
++/** Dictionary namespace owned by this plugin (the usage widget copy). */
++export const NS = 'opencode-usage'
++
++/** Simplified Chinese dictionary (the key-set source of truth). */
++export const zh = {
++  /** Trigger row label when the sidebar is wide. */
++  title: 'OpenCode Go 用量',
++  /** Compact three-window reading for the collapsed rail tooltip. */
++  summary: '5小时 {rolling}% · 本周 {weekly}% · 本月 {monthly}%',
++  /** Window names. */
++  rolling: '5小时窗口',
++  weekly: '本周',
++  monthly: '本月',
++  /** Meter captions. */
++  remaining: '剩余',
++  resetsIn: '后重置',
++  /** Panel chrome. */
++  updatedAt: '更新于',
++  refresh: '刷新',
++  openDashboard: '打开订阅页',
++  /** States. */
++  loading: '加载中…',
++  error: '获取失败',
++} satisfies Record<string, string>
++
++/** The usage namespace key union. */
++export type UsageKey = keyof typeof zh
++
++/** English dictionary, checked complete against the zh key set. */
++export const en = {
++  title: 'OpenCode Go usage',
++  summary: '5h {rolling}% · week {weekly}% · month {monthly}%',
++  rolling: '5-hour window',
++  weekly: 'Weekly',
++  monthly: 'Monthly',
++  remaining: 'left',
++  resetsIn: 'to reset',
++  updatedAt: 'Updated',
++  refresh: 'Refresh',
++  openDashboard: 'Open dashboard',
++  loading: 'Loading…',
++  error: 'Failed to load',
++} satisfies Record<UsageKey, string>
+diff --git a/packages/client/ui-usage/src/client/usage-monitor.ts b/packages/client/ui-usage/src/client/usage-monitor.ts
+new file mode 100644
+index 0000000000..59313423ee
+--- /dev/null
++++ b/packages/client/ui-usage/src/client/usage-monitor.ts
+@@ -0,0 +1,94 @@
++/**
++ * Live OpenCode Go quota monitor: polls the same-origin bridge route and
++ * exposes an immutable snapshot through a minimal observable store. The
++ * renderer binds it into a selector hook; no subscription machinery here.
++ */
++
++export interface UsageWindow {
++  status: string
++  percent: number
++  resetsAt: string
++}
++
++/** The bridge route payload. */
++export interface UsageData {
++  usage: {
++    rolling: UsageWindow
++    weekly: UsageWindow
++    monthly: UsageWindow
++  }
++}
++
++/** Widget state: exactly one of the three phases. */
++export interface UsageSnapshot {
++  phase: 'loading' | 'ready' | 'error'
++  data?: UsageData
++  fetchedAt?: string
++  error?: string
++}
++
++/** Same-origin bridge route mounted by dsh-host-opencode-usage. */
++const ENDPOINT = '/api/opencode-go/usage'
++/** Poll cadence: the bridge caches for 30s, so a minute keeps both sides calm. */
++const REFRESH_INTERVAL_MS = 60_000
++
++/** Minimal observable store the slot renderer binds into `useUsage`. */
++export class UsageMonitor {
++  private snapshot: UsageSnapshot = { phase: 'loading' }
++  private readonly listeners = new Set<() => void>()
++  private timer: number | undefined
++  private inflight = false
++
++  /** Begin polling (idempotent): one immediate refresh, then the interval. */
++  start(): void {
++    if (this.timer !== undefined) return
++    void this.refresh()
++    this.timer = window.setInterval(() => { void this.refresh() }, REFRESH_INTERVAL_MS)
++  }
++
++  /** Stop polling. */
++  stop(): void {
++    if (this.timer !== undefined) window.clearInterval(this.timer)
++    this.timer = undefined
++  }
++
++  /** Fetch the latest quota snapshot from the bridge route. */
++  async refresh(): Promise<void> {
++    if (this.inflight) return
++    this.inflight = true
++    try {
++      const response = await fetch(ENDPOINT, { cache: 'no-store' })
++      const body = await response.json() as Record<string, unknown>
++      if (response.ok && typeof body.usage === 'object' && body.usage !== null) {
++        const next: UsageSnapshot = { phase: 'ready', data: body as unknown as UsageData }
++        if (typeof body.fetchedAt === 'string') next.fetchedAt = body.fetchedAt
++        this.set(next)
++      } else {
++        this.set({
++          phase: 'error',
++          error: typeof body.message === 'string' ? body.message : `HTTP ${response.status}`,
++        })
++      }
++    } catch (error) {
++      this.set({ phase: 'error', error: error instanceof Error ? error.message : String(error) })
++    } finally {
++      this.inflight = false
++    }
++  }
++
++  /** Current snapshot (stable reference between changes). */
++  getSnapshot(): UsageSnapshot {
++    return this.snapshot
++  }
++
++  /** Subscribe to snapshot changes. @returns the unsubscriber. */
++  subscribe(listener: () => void): () => void {
++    this.listeners.add(listener)
++    return () => { this.listeners.delete(listener) }
++  }
++
++  private set(next: UsageSnapshot): void {
++    this.snapshot = next
++    for (const listener of this.listeners) listener()
++  }
++}
+diff --git a/packages/client/ui-usage/src/css-modules.d.ts b/packages/client/ui-usage/src/css-modules.d.ts
+new file mode 100644
+index 0000000000..bc5e482353
+--- /dev/null
++++ b/packages/client/ui-usage/src/css-modules.d.ts
+@@ -0,0 +1,6 @@
++declare module '*.module.css' {
++  const classes: Record<string, string>
++  export default classes
++}
++
++declare module '*.css'
+diff --git a/packages/client/ui-usage/src/index.ts b/packages/client/ui-usage/src/index.ts
+new file mode 100644
+index 0000000000..b899f48845
+--- /dev/null
++++ b/packages/client/ui-usage/src/index.ts
+@@ -0,0 +1,4 @@
++/** Host loader entry for the browser-only usage widget plugin. */
++
++/** Provides no host-side behavior. */
++export function apply(): void {}
+diff --git a/packages/client/ui-usage/src/invariant.ts b/packages/client/ui-usage/src/invariant.ts
+new file mode 100644
+index 0000000000..1b83d985f8
+--- /dev/null
++++ b/packages/client/ui-usage/src/invariant.ts
+@@ -0,0 +1,31 @@
++/**
++ * Package-owned invariant companion for `@deepseek-ai/dsh-client-ui-usage`.
++ * @module @deepseek-ai/dsh-client-ui-usage/invariant
++ */
++
++/* jscpd:ignore-start */
++import type { Context } from '@deepseek-ai/cordis'
++import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
++
++const PACKAGE_NAME = '@deepseek-ai/dsh-client-ui-usage'
++
++/** Cordis companion plugin name. */
++export const name = 'client-ui-usage-invariant'
++/** Service required before the companion can reserve package ownership. */
++export const inject = ['invariants']
++
++/**
++ * No runtime invariant: a pure-consumer plugin — it emits no cordis events
++ * and owns no mutable cross-plugin state; its view-slot registration is a
++ * plain effect whose disposal the slot ledger's own specs observe directly.
++ */
++const install: InvariantInstaller = () => {}
++
++/**
++ * Register this package's invariant companion.
++ * @param ctx - Cordis context carrying the invariant service.
++ * @returns the installed registration's disposer after setup succeeds.
++ */
++export const apply = (ctx: Context): Promise<() => void> =>
++  Promise.resolve(ctx.invariants.register(PACKAGE_NAME, install))
++/* jscpd:ignore-end */
+diff --git a/packages/client/ui-usage/tsconfig.json b/packages/client/ui-usage/tsconfig.json
+new file mode 100644
+index 0000000000..5c38e8c472
+--- /dev/null
++++ b/packages/client/ui-usage/tsconfig.json
+@@ -0,0 +1,33 @@
++{
++  "extends": "../../../tsconfig.base.client.json",
++  "compilerOptions": {
++    "rootDir": "src",
++    "outDir": "lib/types"
++  },
++  "include": [
++    "src"
++  ],
++  "references": [
++    {
++      "path": "../../../vendor/cordis"
++    },
++    {
++      "path": "../locale"
++    },
++    {
++      "path": "../ui-renderer"
++    },
++    {
++      "path": "../ui-workspace"
++    },
++    {
++      "path": "../ui-slots"
++    },
++    {
++      "path": "../ui-primitives"
++    },
++    {
++      "path": "../../runtime-diagnostics/invariants"
++    }
++  ]
++}
+diff --git a/packages/client/ui-usage/tsdown.config.ts b/packages/client/ui-usage/tsdown.config.ts
+new file mode 100644
+index 0000000000..64c0eccfc2
+--- /dev/null
++++ b/packages/client/ui-usage/tsdown.config.ts
+@@ -0,0 +1,3 @@
++import { clientBundle } from '../tsdown.client.ts'
++
++export default clientBundle('@deepseek-ai/dsh-client-ui-usage', ['lib/types/index.js', 'lib/types/invariant.js'])
+diff --git a/packages/client/ui-workspace/src/client/contract/slots.ts b/packages/client/ui-workspace/src/client/contract/slots.ts
+index df17251c38..7921d669ce 100644
+--- a/packages/client/ui-workspace/src/client/contract/slots.ts
++++ b/packages/client/ui-workspace/src/client/contract/slots.ts
+@@ -57,9 +57,24 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
+     'conversation.hero.workspace.directoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }
+     /** Directory-flow hole under the sidebar browsing region (declared by the WorkspaceBrowser entry). */
+     'sidebar.workspaces.directoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }
++    /**
++     * The wide-only strip pinned below the browsing region's session list —
++     * between the last session row (the collapsed group's "Show more
++     * sessions" overflow button when present) and the sidebar foot. Root
++     * scope: entries survive session switches; the owner passes the column
++     * display state and nothing else. Entries render by ascending order;
++     * an empty strip renders nothing, and the rail state renders no strip.
++     */
++    'sidebar.workspaces.footer': { kind: 'list'; scope: 'root'; owner: WorkspaceFootOwnerProps }
+   }
+ }
+ 
++/** Owner share of the browsing-region foot strip: the sidebar column state. */
++export interface WorkspaceFootOwnerProps {
++  /** Whether the sidebar renders wide content (false = 56px rail, icon only). */
++  wide: boolean
++}
++
+ /** The two directory-flow holes; a flow package's client half registers its one component into both. */
+ export type DirectoryFlowSlotName =
+   | 'conversation.hero.workspace.directoryFlow'
+@@ -147,7 +162,7 @@ export type WorkspaceBrowserInjected = {
+ /** Full browser props: shell owner share + viewing store + injected actions + the locale seat. */
+ export type WorkspaceBrowserProps =
+   PropsRuntime<'sidebar.workspaces'>
+-  & PropsRenderSlots<'sidebar.workspaces.directoryFlow'>
++  & PropsRenderSlots<'sidebar.workspaces.directoryFlow' | 'sidebar.workspaces.footer'>
+   & PropsStore<ReturnType<typeof createWorkspaceViewStore>>
+   & Omit<WorkspaceBrowserInjected, 'hooks'>
+   & PropsHooks<WorkspaceBrowserInjected['hooks']>
+diff --git a/packages/client/ui-workspace/src/client/index.ts b/packages/client/ui-workspace/src/client/index.ts
+index 7c8e1108dc..205641603e 100644
+--- a/packages/client/ui-workspace/src/client/index.ts
++++ b/packages/client/ui-workspace/src/client/index.ts
+@@ -138,7 +138,10 @@ export function apply(ctx: Context): void {
+   ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register(
+     {
+       name: 'sidebar.workspaces',
+-      children: { 'sidebar.workspaces.directoryFlow': { kind: 'single', scope: 'root' } },
++      children: {
++        'sidebar.workspaces.directoryFlow': { kind: 'single', scope: 'root' },
++        'sidebar.workspaces.footer': { kind: 'list', scope: 'root' },
++      },
+       store: createWorkspaceViewStore(),
+       inject: browserInjected,
+       locale: NS,
+diff --git a/packages/client/ui-workspace/src/client/rows/WorkspaceBrowser.module.css b/packages/client/ui-workspace/src/client/rows/WorkspaceBrowser.module.css
+index 1ce0f8e1b2..ea4a6d5547 100644
+--- a/packages/client/ui-workspace/src/client/rows/WorkspaceBrowser.module.css
++++ b/packages/client/ui-workspace/src/client/rows/WorkspaceBrowser.module.css
+@@ -278,6 +278,18 @@
+   background: var(--dsw-alias-interactive-bg-hover);
+ }
+ 
++/* Foot strip below the session list: wide-only, pinned between the list
++   and the sidebar foot. Empty (no entries) renders nothing. */
++.workspaceFoot {
++  flex: none;
++  border-top: 1px solid var(--dsw-alias-border-l2);
++  padding: 8px 0 0;
++}
++
++.workspaceFoot:empty {
++  display: none;
++}
++
+ /* List seat: always mounted so the shell foot never moves. */
+ .listArea {
+   flex: 1;
+diff --git a/packages/client/ui-workspace/src/client/rows/WorkspaceBrowser.tsx b/packages/client/ui-workspace/src/client/rows/WorkspaceBrowser.tsx
+index 0ef21ddb82..cb1456c8f3 100644
+--- a/packages/client/ui-workspace/src/client/rows/WorkspaceBrowser.tsx
++++ b/packages/client/ui-workspace/src/client/rows/WorkspaceBrowser.tsx
+@@ -1317,6 +1317,15 @@ export function WorkspaceBrowser({
+             ))}
+       </div>
+ 
++      {/* Foot strip below the session list: between the last row (the
++          collapsed group's "Show more sessions" button when present) and the
++          sidebar foot. Wide-only — the rail renders no strip. */}
++      {wide && (
++        <div className={css.workspaceFoot}>
++          {renderSlot('sidebar.workspaces.footer', { wide })}
++        </div>
++      )}
++
+       <Modal
+         open={renameTarget !== null}
+         onClose={closeRename}
+diff --git a/packages/host/opencode-usage/README.md b/packages/host/opencode-usage/README.md
+new file mode 100644
+index 0000000000..1520aba9e0
+--- /dev/null
++++ b/packages/host/opencode-usage/README.md
+@@ -0,0 +1,7 @@
++# @deepseek-ai/dsh-host-opencode-usage
++
++Same-origin bridge to [OpenCode Go](https://opencode.ai/docs/go/)'s official quota API.
++
++Mounts `GET /api/opencode-go/usage` on the DSH webserver. The route reads the Go bearer token from `~/.codex/config.toml` (`[model_providers.opencode].experimental_bearer_token`, or `OPENCODE_GO_TOKEN`), queries `https://opencode.ai/zen/go/v1/usage`, and answers with the quota payload plus `fetchedAt`. The token never appears in a response.
++
++Upstream 401/403 responses and missing tokens carry a `message` field; upstream results are cached for 30 seconds.
+diff --git a/packages/host/opencode-usage/package.json b/packages/host/opencode-usage/package.json
+new file mode 100644
+index 0000000000..bee07f46e2
+--- /dev/null
++++ b/packages/host/opencode-usage/package.json
+@@ -0,0 +1,44 @@
++{
++  "name": "@deepseek-ai/dsh-host-opencode-usage",
++  "description": "Same-origin bridge to OpenCode Go's official quota API: the sidebar usage widget's data feed (token stays host-side)",
++  "version": "0.1.0-rc.5",
++  "publishConfig": {
++    "access": "public"
++  },
++  "repository": {
++    "type": "git",
++    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
++    "directory": "packages/host/opencode-usage"
++  },
++  "type": "module",
++  "main": "lib/index.js",
++  "types": "lib/types/index.d.ts",
++  "exports": {
++    ".": {
++      "types": "./lib/types/index.d.ts",
++      "default": "./lib/index.js"
++    },
++    "./invariant": {
++      "types": "./lib/types/invariant.d.ts",
++      "default": "./lib/invariant.js"
++    },
++    "./src/*": "./src/*",
++    "./package.json": "./package.json"
++  },
++  "files": [
++    "lib/index.js",
++    "lib/invariant.js",
++    "lib/types/**/*.d.ts"
++  ],
++  "license": "MIT",
++  "peerDependencies": {
++    "@deepseek-ai/dsh-host-webserver": "workspace:^",
++    "@deepseek-ai/dsh-invariants": "workspace:^",
++    "@deepseek-ai/cordis": "workspace:^"
++  },
++  "devDependencies": {
++    "@deepseek-ai/dsh-host-webserver": "workspace:^",
++    "@deepseek-ai/dsh-invariants": "workspace:^",
++    "@deepseek-ai/cordis": "workspace:^"
++  }
++}
+diff --git a/packages/host/opencode-usage/src/index.ts b/packages/host/opencode-usage/src/index.ts
+new file mode 100644
+index 0000000000..2d8f71968a
+--- /dev/null
++++ b/packages/host/opencode-usage/src/index.ts
+@@ -0,0 +1,146 @@
++/**
++ * @deepseek-ai/dsh-host-opencode-usage — same-origin bridge to OpenCode Go's
++ * official quota API. The sidebar usage widget fetches this route; the Go
++ * bearer token is read from the local Codex config and never leaves the host.
++ * @module @deepseek-ai/dsh-host-opencode-usage
++ */
++
++import { readFileSync } from 'node:fs'
++import { homedir } from 'node:os'
++import { join } from 'node:path'
++import type { Context } from '@deepseek-ai/cordis'
++// Type-only: pulls the webserver's Context merge (ctx.webServer).
++import type {} from '@deepseek-ai/dsh-host-webserver'
++
++/** Stable Cordis plugin name. */
++export const name = 'opencode-usage'
++
++/** The webserver service carrying the route registry. */
++export const inject = ['webServer']
++
++/** The official OpenCode Go quota endpoint. */
++const API_URL = 'https://opencode.ai/zen/go/v1/usage'
++/** Same-origin path the Web GUI fetches. */
++const ROUTE_PATH = '/api/opencode-go/usage'
++/** Bridge-side cache so a per-minute poll never hammers the official API. */
++const CACHE_TTL_MS = 30_000
++const FETCH_TIMEOUT_MS = 15_000
++
++/** One quota window as reported by the official API. */
++export interface UsageWindow {
++  status: string
++  percent: number
++  resetsAt: string
++}
++
++/** The official quota payload. */
++export interface GoUsagePayload {
++  usage: {
++    rolling: UsageWindow
++    weekly: UsageWindow
++    monthly: UsageWindow
++  }
++}
++
++/**
++ * Extract the OpenCode Go bearer token from a Codex `config.toml` body: the
++ * token line inside the `[model_providers.opencode]` section.
++ * @param configText - raw config.toml text.
++ * @returns the token, or undefined when the provider section or line is absent.
++ */
++export function resolveToken(configText: string): string | undefined {
++  const section = configText.match(/\[model_providers\.opencode\]([\s\S]*?)(?=\r?\n\[|$)/)
++  if (section === null) return undefined
++  const token = section[1]?.match(/experimental_bearer_token\s*=\s*["']([^"']+)["']/)
++  return token?.[1]
++}
++
++/**
++ * Read the token from the user's Codex config file.
++ * @returns the token, or undefined when the file is missing or unreadable.
++ */
++export function resolveTokenFromConfig(): string | undefined {
++  try {
++    return resolveToken(readFileSync(join(homedir(), '.codex', 'config.toml'), 'utf8'))
++  } catch {
++    return undefined
++  }
++}
++
++/**
++ * Query the official quota API.
++ * @param token - the OpenCode Go bearer token.
++ * @returns the upstream status code and parsed (or fallback) body.
++ */
++export async function fetchGoUsage(token: string): Promise<{ status: number; body: unknown }> {
++  const response = await fetch(API_URL, {
++    headers: {
++      Authorization: `Bearer ${token}`,
++      'User-Agent': 'dsh-opencode-usage/0.1',
++    },
++    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
++  })
++  const text = await response.text()
++  let body: unknown
++  try {
++    body = JSON.parse(text)
++  } catch {
++    body = { error: 'unexpected-response', raw: text.slice(0, 200) }
++  }
++  return { status: response.status, body }
++}
++
++/**
++ * Mount the same-origin usage route. Answers JSON: the official quota payload
++ * plus `fetchedAt`; upstream 401/403 and local token problems carry a
++ * human-readable `message`. Responses never contain the token.
++ * @param ctx - plugin context carrying the webServer service.
++ */
++export function apply(ctx: Context): void {
++  let cache: { at: number; status: number; payload: string } | undefined
++  ctx.effect(
++    () => ctx.webServer.register({
++      kind: 'exact',
++      path: ROUTE_PATH,
++      handler: async (req, res) => {
++        if (req.method !== 'GET' && req.method !== 'HEAD') {
++          res.writeHead(405, { Allow: 'GET, HEAD' })
++          res.end()
++          return
++        }
++        const now = Date.now()
++        if (cache !== undefined && now - cache.at < CACHE_TTL_MS) {
++          res.writeHead(cache.status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
++          res.end(cache.payload)
++          return
++        }
++        const token = process.env.OPENCODE_GO_TOKEN ?? resolveTokenFromConfig()
++        let status = 502
++        let payload: Record<string, unknown>
++        if (token === undefined) {
++          status = 503
++          payload = {
++            error: 'no-token',
++            message: 'OpenCode Go bearer token not found in ~/.codex/config.toml ([model_providers.opencode].experimental_bearer_token) and OPENCODE_GO_TOKEN is unset.',
++          }
++        } else {
++          try {
++            const result = await fetchGoUsage(token)
++            status = result.status
++            payload = result.body as Record<string, unknown>
++            if (status === 401) payload = { ...payload, message: 'OpenCode Go rejected the local token (401) — log in to OpenCode Go again to refresh it.' }
++            if (status === 403) payload = { ...payload, message: 'This account has no OpenCode Go subscription (403).' }
++          } catch (error) {
++            status = 502
++            payload = { error: 'upstream-unreachable', message: error instanceof Error ? error.message : String(error) }
++          }
++        }
++        const body = JSON.stringify({ ...payload, fetchedAt: new Date().toISOString() })
++        cache = { at: now, status, payload: body }
++        res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
++        res.end(body)
++      },
++    }),
++    'opencode-usage: usage route',
++  )
++}
+diff --git a/packages/host/opencode-usage/src/invariant.ts b/packages/host/opencode-usage/src/invariant.ts
+new file mode 100644
+index 0000000000..578f20ca40
+--- /dev/null
++++ b/packages/host/opencode-usage/src/invariant.ts
+@@ -0,0 +1,31 @@
++/**
++ * Package-owned invariant companion for `@deepseek-ai/dsh-host-opencode-usage`.
++ * @module @deepseek-ai/dsh-host-opencode-usage/invariant
++ */
++
++/* jscpd:ignore-start */
++import type { Context } from '@deepseek-ai/cordis'
++import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
++
++const PACKAGE_NAME = '@deepseek-ai/dsh-host-opencode-usage'
++
++/** Cordis companion plugin name. */
++export const name = 'opencode-usage-invariant'
++/** Service required before the companion can reserve package ownership. */
++export const inject = ['invariants']
++
++/**
++ * No runtime invariant: the bridge emits no cordis events and owns no
++ * mutable cross-plugin state; its webServer route registration is a plain
++ * effect whose disposal the webserver route ledger observes directly.
++ */
++const install: InvariantInstaller = () => {}
++
++/**
++ * Register this package's invariant companion.
++ * @param ctx - Cordis context carrying the invariant service.
++ * @returns the installed registration's disposer after setup succeeds.
++ */
++export const apply = (ctx: Context): Promise<() => void> =>
++  Promise.resolve(ctx.invariants.register(PACKAGE_NAME, install))
++/* jscpd:ignore-end */
+diff --git a/packages/host/opencode-usage/tsconfig.json b/packages/host/opencode-usage/tsconfig.json
+new file mode 100644
+index 0000000000..f4666cd4d1
+--- /dev/null
++++ b/packages/host/opencode-usage/tsconfig.json
+@@ -0,0 +1,21 @@
++{
++  "extends": "../../../tsconfig.base.json",
++  "compilerOptions": {
++    "rootDir": "src",
++    "outDir": "lib/types"
++  },
++  "include": [
++    "src"
++  ],
++  "references": [
++    {
++      "path": "../../../vendor/cordis"
++    },
++    {
++      "path": "../webserver"
++    },
++    {
++      "path": "../../runtime-diagnostics/invariants"
++    }
++  ]
++}
+diff --git a/packages/host/opencode-usage/tsdown.config.ts b/packages/host/opencode-usage/tsdown.config.ts
+new file mode 100644
+index 0000000000..1f63e6de66
+--- /dev/null
++++ b/packages/host/opencode-usage/tsdown.config.ts
+@@ -0,0 +1,17 @@
++import { defineConfig } from 'tsdown'
++
++/**
++ * Node-only host library: emit lib/index.js and lib/invariant.js from the
++ * TypeScript output. cordis, the webserver package, the invariant package,
++ * and node builtins stay external.
++ */
++export default defineConfig({
++  entry: ['lib/types/index.js', 'lib/types/invariant.js'],
++  outDir: 'lib',
++  format: ['esm'],
++  platform: 'node',
++  target: 'es2024',
++  fixedExtension: false,
++  dts: false,
++  clean: false,
++})
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index a286e8db0a..a44098b6b4 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -1597,6 +1597,9 @@ importers:
+       '@deepseek-ai/dsh-client-ui-trajectory':
+         specifier: workspace:^
+         version: link:../../client/ui-trajectory
++      '@deepseek-ai/dsh-client-ui-usage':
++        specifier: workspace:^
++        version: link:../../client/ui-usage
+       '@deepseek-ai/dsh-client-ui-user-questions':
+         specifier: workspace:^
+         version: link:../../client/ui-user-questions
+@@ -1636,6 +1639,9 @@ importers:
+       '@deepseek-ai/dsh-host-frontend-static':
+         specifier: workspace:^
+         version: link:../../host/frontend-static
++      '@deepseek-ai/dsh-host-opencode-usage':
++        specifier: workspace:^
++        version: link:../../host/opencode-usage
+       '@deepseek-ai/dsh-host-plugin-inventory':
+         specifier: workspace:^
+         version: link:../../host/plugin-inventory
+@@ -3635,6 +3641,42 @@ importers:
+         specifier: ^18.2.0
+         version: 18.3.1(react@18.3.1)
+ 
++  packages/client/ui-usage:
++    devDependencies:
++      '@deepseek-ai/cordis':
++        specifier: workspace:^
++        version: link:../../../vendor/cordis
++      '@deepseek-ai/dsh-client-locale':
++        specifier: workspace:^
++        version: link:../locale
++      '@deepseek-ai/dsh-client-ui-primitives':
++        specifier: workspace:^
++        version: link:../ui-primitives
++      '@deepseek-ai/dsh-client-ui-renderer':
++        specifier: workspace:^
++        version: link:../ui-renderer
++      '@deepseek-ai/dsh-client-ui-slots':
++        specifier: workspace:^
++        version: link:../ui-slots
++      '@deepseek-ai/dsh-client-ui-workspace':
++        specifier: workspace:^
++        version: link:../ui-workspace
++      '@deepseek-ai/dsh-invariants':
++        specifier: workspace:^
++        version: link:../../runtime-diagnostics/invariants
++      '@types/react':
++        specifier: ~18.3.1
++        version: 18.3.31
++      '@types/react-dom':
++        specifier: ~18.3.0
++        version: 18.3.7(@types/react@18.3.31)
++      react:
++        specifier: ^18.2.0
++        version: 18.3.1
++      react-dom:
++        specifier: ^18.2.0
++        version: 18.3.1(react@18.3.1)
++
+   packages/client/ui-user-questions:
+     dependencies:
+       clsx:
+@@ -5838,6 +5880,18 @@ importers:
+         specifier: workspace:^
+         version: link:../webserver
+ 
++  packages/host/opencode-usage:
++    devDependencies:
++      '@deepseek-ai/cordis':
++        specifier: workspace:^
++        version: link:../../../vendor/cordis
++      '@deepseek-ai/dsh-host-webserver':
++        specifier: workspace:^
++        version: link:../webserver
++      '@deepseek-ai/dsh-invariants':
++        specifier: workspace:^
++        version: link:../../runtime-diagnostics/invariants
++
+   packages/host/plugin-inventory:
+     dependencies:
+       zod:
+diff --git a/tsconfig.base.json b/tsconfig.base.json
+index e0749acbb4..4a6d172b50 100644
+--- a/tsconfig.base.json
++++ b/tsconfig.base.json
+@@ -148,6 +148,7 @@
+       "@deepseek-ai/dsh-host-frontend-static": ["./packages/host/frontend-static/src"],
+       "@deepseek-ai/dsh-host-plugin-inventory": ["./packages/host/plugin-inventory/src"],
+       "@deepseek-ai/dsh-host-plugin-inventory/types": ["./packages/host/plugin-inventory/src/types.ts"],
++      "@deepseek-ai/dsh-host-opencode-usage": ["./packages/host/opencode-usage/src"],
+       "@deepseek-ai/dsh-client-ui-slots": ["./packages/client/ui-slots/src"],
+       "@deepseek-ai/dsh-client-ui-attachment": ["./packages/client/ui-attachment/src"],
+       "@deepseek-ai/dsh-client-ui-primitives": ["./packages/client/ui-primitives/src"],
+@@ -199,6 +200,7 @@
+       "@deepseek-ai/dsh-client-ui-plan": ["./packages/client/ui-plan/src"],
+       "@deepseek-ai/dsh-client-ui-user-questions": ["./packages/client/ui-user-questions/src"],
+       "@deepseek-ai/dsh-client-ui-trajectory": ["./packages/client/ui-trajectory/src"],
++      "@deepseek-ai/dsh-client-ui-usage": ["./packages/client/ui-usage/src"],
+       "@deepseek-ai/dsh-client-ui-workspace": ["./packages/client/ui-workspace/src"],
+       "@deepseek-ai/dsh-client-ui-theme": ["./packages/client/ui-theme/src"],
+       "@deepseek-ai/dsh-client-ui-settings": ["./packages/client/ui-settings/src"],
+diff --git a/tsconfig.client.json b/tsconfig.client.json
+index c186cfbc47..b29652ac76 100644
+--- a/tsconfig.client.json
++++ b/tsconfig.client.json
+@@ -92,6 +92,7 @@
+     { "path": "./packages/client/ui-settings-plugins" },
+     { "path": "./packages/client/ui-user-questions" },
+     { "path": "./packages/client/ui-trajectory" },
++    { "path": "./packages/client/ui-usage" },
+     { "path": "./packages/session-query/session-log-export/tsconfig.client.json" },
+     { "path": "./packages/client/ui-theme" },
+     { "path": "./packages/client/ui-settings" },
+diff --git a/tsconfig.host.json b/tsconfig.host.json
+index 85ae2dac00..3c5615f151 100644
+--- a/tsconfig.host.json
++++ b/tsconfig.host.json
+@@ -330,6 +330,7 @@
+     { "path": "./packages/host/directory-picker-native" },
+     { "path": "./packages/host/frontend-static" },
+     { "path": "./packages/host/plugin-inventory" },
++    { "path": "./packages/host/opencode-usage" },
+     { "path": "./packages/llm/plugin-package-inventory-deepseek" },
+     { "path": "./packages/host/webserver" },
+     { "path": "./packages/sdk/client" },
+-- 
+2.55.0.windows.4
+
